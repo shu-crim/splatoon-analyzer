@@ -13,7 +13,7 @@ default_movie_path = r'D:\Documents\OBS\test2.mp4'
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-12_19-27-37_エリア勝利_キンメダイ美術館.mp4' #エリアノックアウト勝利
 # default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_21-29-17_昇格戦_エリア敗北_海女美術大学.mp4' #エリアノックアウト敗北
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-31_12-33-02_延長突入.mp4' #延長突入
-# default_movie_path = r'D:\Documents\OBS\ガチエリア\ペナルティ読みミス.mp4'
+default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-09_20-24-34_メモリ_エリア勝利_ナメロウ金属.mp4'
 
 # 動画出力
 def clipMovie(path_movie, path_seve, clip_start_sec, clip_end_sec, fps=30):
@@ -40,11 +40,11 @@ def main(movie_path, output_dir):
 
     # ゲーム時間1秒単位のタイムライン
     game_time_max = int(video_frame_count / video_fps) + 300 # 最短300秒+動画時間
-    cols = ["GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death"]
-    df_timeline = pd.DataFrame([[0, 100, 100, 0, 0, 4, 4, 0, 0]], columns=cols) # ゲーム開始時
+    cols = ["GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
+    df_timeline = pd.DataFrame([[0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
-        df_timeline = df_timeline.append(pd.Series([i, -1, -1, -1, -1, -1, -1, 0, 0], index=df_timeline.columns), ignore_index=True)
+        df_timeline = df_timeline.append(pd.Series([i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
 
     # 初期化
     index_frame = 1
@@ -168,6 +168,19 @@ def main(movie_path, output_dir):
             df_timeline.loc[i, "OurNumLive"] = df_timeline.loc[i - 1, "OurNumLive"]
         if df_timeline.loc[i, "OpponentNumLive"] < 0:
             df_timeline.loc[i, "OpponentNumLive"] = df_timeline.loc[i - 1, "OpponentNumLive"]
+
+        # 分析用にデータ加工
+        df_timeline.loc[i, "NumSubLive"] = df_timeline.loc[i, "OurNumLive"] - df_timeline.loc[i, "OpponentNumLive"]
+        
+        if gachi_kind == recognition.GachiKind.area:
+            # ガチエリアでの主導権はカウント進行で把握
+            if df_timeline.loc[i - 1, "OurCount"] - df_timeline.loc[i, "OurCount"] > 0 or df_timeline.loc[i - 1, "OurPenalty"] - df_timeline.loc[i, "OurPenalty"] > 0:
+                df_timeline.loc[i, "Initiative"] = 1
+            elif df_timeline.loc[i - 1, "OpponentCount"] - df_timeline.loc[i, "OpponentCount"] > 0 or df_timeline.loc[i - 1, "OpponentPenalty"] - df_timeline.loc[i, "OpponentPenalty"] > 0:
+                df_timeline.loc[i, "Initiative"] = -1
+            else:
+                df_timeline.loc[i, "Initiative"] = 0
+
 
     output_csv_path = os.path.join(output_dir, os.path.basename(movie_path).split(".")[0] + "_timeline.csv")
     df_timeline.to_csv(output_csv_path)
