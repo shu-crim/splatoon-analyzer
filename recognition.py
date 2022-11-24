@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from enum import Enum
 import matplotlib.pyplot as plt
+import time
 
 
 class IkaLampReader:
@@ -14,14 +15,14 @@ class IkaLampReader:
     span_lamps = 64
     num_lumps_per_team = 4
     th_cross_match = 0.8
-    th_offline_match = 0.8
+    th_offline_match = 0.9
 
     def __init__(self, cross_template_img_path, offline_template_img_path):
         self.img_cross_template = cv2.cvtColor(cv2.imread(cross_template_img_path), cv2.COLOR_BGR2GRAY)
         self.mask_cross = self.img_cross_template != 0
         self.cross_px = np.sum(self.mask_cross)
         self.img_offline_template = cv2.imread(offline_template_img_path)
-        self.height_offline_template = self.img_offline_template.shape[0]
+        self.height_offline_template, self.width_offline_template = self.img_offline_template.shape[:2]
 
     def read(self, img_capture):
         our_lamp = self.readFourLamps(img_capture[self.roi_top_lamps:self.roi_bottom_lamps, self.roi_left_our_lamps:self.roi_left_our_lamps+self.roi_width_lamps])
@@ -33,11 +34,26 @@ class IkaLampReader:
         img_sub_cross_lumi = np.abs(roi_lamps.astype(int) - self.cross_lumi)
         img_sub_cross_lumi = np.sum(img_sub_cross_lumi, axis=2)
 
-        match_width = roi_lamps.shape[1] - width_cross
+        # 高速化のため画像を縮小して処理
+        shrink_rate = 4
+        img_sub_cross_lumi = img_sub_cross_lumi[::shrink_rate, ::shrink_rate]
+        width_cross //= shrink_rate
+        mask_cross = self.mask_cross[::shrink_rate, ::shrink_rate]
+        cross_px = np.sum(mask_cross)
+        span_lamps = self.span_lamps // shrink_rate
+
+        time_start = time.perf_counter()
+        match_width = img_sub_cross_lumi.shape[1] - width_cross
         match = np.zeros((match_width))
         for x in range(match_width):
             roi = img_sub_cross_lumi[:, x:x+width_cross]
-            match[x] = 1 - sum(roi[self.mask_cross]) / self.cross_px / 255
+            match[x] = 1 - sum(roi[mask_cross]) / cross_px / 255
+        # print(str.format("time matching:{0}sec", time.perf_counter() - time_start))
+
+        # plt.plot(match)
+        # plt.show()
+        cv2.imshow('roi_lamps', roi_lamps[::shrink_rate, ::shrink_rate])
+        # cv2.waitKey(0)
 
         num_cross = 0
         lamps = [True, True, True, True]
@@ -47,8 +63,8 @@ class IkaLampReader:
             x_max = np.argmax(match)
             if (match[x_max] >= self.th_cross_match):
                 num_cross += 1
-                lamps[self.IconSenterXtoIndex(x_max, opponent)] = False
-                match[max(0, x_max-self.span_lamps//2):min(x_max+self.span_lamps//2, match.shape[0])] = 0
+                lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = False
+                match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, match.shape[0])] = 0
             else:
                 break
 
@@ -56,13 +72,19 @@ class IkaLampReader:
         num_offline = 0
         top_offline = (roi_lamps.shape[0] - self.height_offline_template) // 2
         roi_offline = roi_lamps[top_offline:top_offline+self.height_offline_template, :]
-        offline_match = cv2.matchTemplate(roi_offline, self.img_offline_template, cv2.TM_CCOEFF_NORMED)[0]
+        offline_match = 1 - cv2.matchTemplate(roi_offline, self.img_offline_template, cv2.TM_SQDIFF)[0] / self.height_offline_template / self.width_offline_template / (255 * 255)
+
+        # plt.plot(offline_match)
+        # plt.show()
+        # cv2.imshow('roi_offline', roi_offline)
+        # cv2.waitKey(0)
+
         for i in range(self.num_lumps_per_team):
             x_max = np.argmax(offline_match)
             if (offline_match[x_max] >= self.th_offline_match):
                 num_offline += 1
-                lamps[self.IconSenterXtoIndex(x_max, opponent)] = False
-                offline_match[max(0, x_max-self.span_lamps//2):min(x_max+self.span_lamps//2, match.shape[0])] = 0
+                lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = False
+                offline_match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, match.shape[0])] = 0
             else:
                 break
 
@@ -307,7 +329,8 @@ class CountReader:
         roi_opponent_penalty = img_capture[self.roi_penalty_top:self.roi_penalty_bottom, self.roi_opponent_penalty_left:self.roi_opponent_penalty_left+self.roi_penalty_width]
         gray_opponent_penalty = cv2.cvtColor(roi_opponent_penalty, cv2.COLOR_BGR2GRAY)
         img_opponent_penalty_resized = cv2.resize(gray_opponent_penalty, dsize=(self.digit_width*2, self.digit_height), interpolation=cv2.INTER_NEAREST)
-        opponent_pnealty = self.readTwoDigits(img_opponent_penalty_resized)
+        ret, img_otsu = cv2.threshold(img_opponent_penalty_resized, 0, 255, cv2.THRESH_OTSU)
+        opponent_pnealty = self.readTwoDigits(img_otsu, 0.65)
 
         # バッファを詰め変える
         self.opponent_pnealty_buffer.append(opponent_pnealty)
@@ -405,3 +428,29 @@ class DeathSearcher:
             return False
 
 
+class FinishSearcher:
+    roi_top = 640
+    roi_bottom = 740
+    roi_left = 1000
+    roi_right = 1250
+
+    def __init__(self, template_img_path, th_finish_match = 0.9):
+        self.img_template = cv2.cvtColor(cv2.imread(template_img_path), cv2.COLOR_BGR2GRAY)
+        self.th_finish_match = th_finish_match
+
+    def find(self, img_capture):
+        roi = img_capture[self.roi_top:self.roi_bottom, self.roi_left:self.roi_right] 
+        img_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        ret, img_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_OTSU)
+
+        result = cv2.matchTemplate(img_otsu, self.img_template, cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+
+        # print(f"max value: {maxVal}, position: {maxLoc}")
+        # cv2.imshow('img_otsu', img_otsu)
+        # cv2.waitKey(0)
+
+        if maxVal >= self.th_finish_match:
+            return True
+        else:
+            return False
