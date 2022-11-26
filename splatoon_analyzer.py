@@ -14,7 +14,7 @@ default_movie_path = r'D:\Documents\OBS\test2.mp4'
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-12_19-27-37_エリア勝利_キンメダイ美術館.mp4' #エリアノックアウト勝利
 # default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_21-29-17_昇格戦_エリア敗北_海女美術大学.mp4' #エリアノックアウト敗北
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-31_12-33-02_延長突入.mp4' #延長突入
-# default_movie_path = r'D:\Documents\OBS\finish部分.mp4'
+# default_movie_path = r'D:\Documents\OBS\ ペナルティ読みミス2.mp4'
 
 # 動画出力
 def clipMovie(path_movie, path_seve, clip_start_sec, clip_end_sec, fps=30):
@@ -27,6 +27,7 @@ def main(movie_path, output_dir):
     cap = cv2.VideoCapture(movie_path)
     video_frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) # フレーム数を取得する
     video_fps = cap.get(cv2.CAP_PROP_FPS)                 # フレームレートを取得する
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 19000) # デバッグ用フレーム移動
 
     # 各種画像処理エンジン
     time_manager = utility.TimeManager(video_fps)
@@ -60,19 +61,23 @@ def main(movie_path, output_dir):
     penalty  = [0, 0]
     time_finish = -1
     proc_time = {}
+    read_frecuency = 5
 
     while True:
-
         # フレーム情報取得
         time_start = time.perf_counter()
         ret, img_frame = cap.read()
         proc_time["time_get_a_frame"] = time.perf_counter() - time_start
+
+        # if index_frame < 6761:
+        #     index_frame += 1
+        #     continue
         
         # 動画が終われば処理終了
         if ret == False:
             break    
 
-        # img_frame = cv2.imread(r"D:\Documents\OBS\lamp_miss.png") #debug
+        # img_frame = cv2.imread(r"D:\Documents\OBS\penalty_miss_1.png") #debug
 
         # 残り時間読み
         time_start = time.perf_counter()
@@ -90,7 +95,7 @@ def main(movie_path, output_dir):
 
         # 各種インジケータが表示中であれば読む
         if indicator_enabled:
-            # カウント読み
+            # カウント読み(毎フレーム読む)
             time_start = time.perf_counter()
             gachi_kind, count, penalty = count_reader.read(img_frame)
             proc_time["time_read_count"] = time.perf_counter() - time_start
@@ -107,7 +112,7 @@ def main(movie_path, output_dir):
                     df_timeline.loc[game_time_int, "OpponentPenalty"] = penalty[1]
 
             # 所定フレームごとに読む
-            if index_frame % 2 == 0:
+            if index_frame % read_frecuency == 0:
                 # イカランプ読み
                 time_start = time.perf_counter()
                 our_lamp, opponent_lamp = ika_lamp_reader.read(img_frame)
@@ -134,12 +139,16 @@ def main(movie_path, output_dir):
                 proc_time["time_find_kill"] = time.perf_counter() - time_start
 
         elif index_frame > 0 and game_time_int > 0:
-            # インジケータが非表示の場合、Finish読み
-            time_start = time.perf_counter()
-            if finish_searcher.find(img_frame):
-                time_finish = game_time_int
-                break
-            proc_time["time_find_finish"] = time.perf_counter() - time_start
+            if time_finish < 0:
+                # インジケータが非表示の場合、Finish読み
+                time_start = time.perf_counter()
+                if finish_searcher.find(img_frame):
+                    time_finish = game_time_int
+                    # break
+                proc_time["time_find_finish"] = time.perf_counter() - time_start
+            else:
+                # Finish読み後はWIN/LOSE読み
+
 
         # debug:状態表示
         time_start = time.perf_counter()

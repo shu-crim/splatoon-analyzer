@@ -52,7 +52,7 @@ class IkaLampReader:
 
         # plt.plot(match)
         # plt.show()
-        cv2.imshow('roi_lamps', roi_lamps[::shrink_rate, ::shrink_rate])
+        # cv2.imshow('roi_lamps', roi_lamps[::shrink_rate, ::shrink_rate])
         # cv2.waitKey(0)
 
         num_cross = 0
@@ -113,7 +113,7 @@ class IkaLampReader:
 class TimeReader:
     img_digit = []
     roi = (54, 94, 915, 1005)
-    th_digit_similarity = 0.8
+    th_digit_similarity = 0.7
     left_upper_sec = 41
     left_lower_sec = 65
     th_extra_time_similarity = 0.7
@@ -177,7 +177,14 @@ class CountReader:
     roi_our_penalty_left = 863
     roi_opponent_penalty_left = 1038
     roi_penalty_width = 40
-    num_buffer_frame_penalty = 5
+    # num_buffer_frame_penalty = 5
+
+    count_same_our_penalty = 0
+    latest_our_penalty = 0
+    count_same_opponent_penalty = 0
+    latest_opponent_penalty = 0
+    th_count_same_penalty_not_zero = 3
+    th_count_same_penalty_zero = 30
     
     def __init__(self, path_template_count100):
         img = cv2.imread(path_template_count100)
@@ -189,8 +196,8 @@ class CountReader:
         self.digit_height, self.digit_width = self.img_template_digit[0].shape[:2]
 
         # ペナルティを読んだ結果のバッファ
-        self.our_pnealty_buffer = [-1 for x in range(self.num_buffer_frame_penalty)]
-        self.opponent_pnealty_buffer = [-1 for x in range(self.num_buffer_frame_penalty)]
+        # self.our_pnealty_buffer = [-1 for x in range(self.num_buffer_frame_penalty)]
+        # self.opponent_pnealty_buffer = [-1 for x in range(self.num_buffer_frame_penalty)]
 
     def read(self, img_capture):
         count = (-1, -1)
@@ -296,6 +303,8 @@ class CountReader:
         for i in range(10):
             result[i] = cv2.matchTemplate(img_digit, self.img_template_digit[i], cv2.TM_CCOEFF_NORMED)
         # print(str.format("digit:{0} match:{1}", np.argmax(result), np.max(result)))
+        # print(str.format("digit:1 match:{0}", result[1]))
+        # print(str.format("digit:7 match:{0}", result[7]))
         return np.argmax(result) if np.max(result) >= th_digit_match else -1
 
     def readAreaPenalty(self, img_capture):
@@ -305,25 +314,23 @@ class CountReader:
         img_our_penalty_resized = cv2.resize(gray_our_penalty, dsize=(self.digit_width*2, self.digit_height), interpolation=cv2.INTER_NEAREST)
         ret, img_otsu = cv2.threshold(img_our_penalty_resized, 0, 255, cv2.THRESH_OTSU)
         our_pnealty = self.readTwoDigits(img_otsu, 0.65)
-        # our_pnealty = 0 if our_pnealty < 0 else our_pnealty
 
-        # バッファを詰め変える
-        self.our_pnealty_buffer.append(our_pnealty)
-        self.our_pnealty_buffer.pop(0)
+        # 同じ数値の継続判定
+        if self.latest_our_penalty == our_pnealty:
+            self.count_same_our_penalty += 1
+        else:
+            self.latest_our_penalty = our_pnealty
+            self.count_same_our_penalty = 1
 
-        # バッファ内のペナルティカウントがすべて同じなら採択
-        same = True
-        for item in self.our_pnealty_buffer:
-            if item != our_pnealty:
-                same = False
-                break
-        if not same:
-            our_pnealty = -1
+        # カウントの確定
+        if self.latest_our_penalty > 0 and self.count_same_our_penalty < self.th_count_same_penalty_not_zero:
+            our_pnealty = -1 # まだ確かでない→読めず
+        if self.latest_our_penalty < 0 and self.count_same_our_penalty >= self.th_count_same_penalty_zero:
+            our_pnealty = 0 # 長い期間読めず→非表示(ゼロ)と判断
 
-        # print(self.our_pnealty_buffer)
         # print("our_pnealty:" + str(our_pnealty))
-        # cv2.imshow('OurPenalty', img_otsu)
-        # cv2.waitKey(1)
+        cv2.imshow('OurPenalty', img_otsu)
+        cv2.waitKey(1)
         
         # 敵
         roi_opponent_penalty = img_capture[self.roi_penalty_top:self.roi_penalty_bottom, self.roi_opponent_penalty_left:self.roi_opponent_penalty_left+self.roi_penalty_width]
@@ -332,18 +339,18 @@ class CountReader:
         ret, img_otsu = cv2.threshold(img_opponent_penalty_resized, 0, 255, cv2.THRESH_OTSU)
         opponent_pnealty = self.readTwoDigits(img_otsu, 0.65)
 
-        # バッファを詰め変える
-        self.opponent_pnealty_buffer.append(opponent_pnealty)
-        self.opponent_pnealty_buffer.pop(0)
+        # 同じ数値の継続判定
+        if self.latest_opponent_penalty == opponent_pnealty:
+            self.count_same_opponent_penalty += 1
+        else:
+            self.latest_opponent_penalty = opponent_pnealty
+            self.count_same_opponent_penalty = 1
 
-        # バッファ内のペナルティカウントがすべて同じなら採択
-        same = True
-        for item in self.opponent_pnealty_buffer:
-            if item != opponent_pnealty:
-                same = False
-                break
-        if not same:
-            opponent_pnealty = -1
+        # カウントの確定
+        if self.latest_opponent_penalty > 0 and self.count_same_opponent_penalty < self.th_count_same_penalty_not_zero:
+            opponent_pnealty = -1 # まだ確かでない→読めず
+        if self.latest_opponent_penalty < 0 and self.count_same_opponent_penalty >= self.th_count_same_penalty_zero:
+            opponent_pnealty = 0 # 長い期間読めず→非表示(ゼロ)と判断
 
         return our_pnealty, opponent_pnealty
 
@@ -354,8 +361,9 @@ class CountReader:
         if img_digits.shape[0] != self.digit_height or img_digits.shape[1] != self.digit_width * 2:
             return -1
 
-        # ROIの端に白画素がある場合、誤読リスクがあるので読まない
-        if np.sum(img_digits[:1, :]) + np.sum(img_digits[-1:, :]) + np.sum(img_digits[:, :1]) + np.sum(img_digits[:, -1:]) > 0:
+        # ROIの上下右端に白画素がある場合、誤読リスクがあるので読まない（左は1桁のときの+があるため適さない）
+        # if np.sum(img_digits[:1, :]) + np.sum(img_digits[-1:, :]) + np.sum(img_digits[:, :1]) + np.sum(img_digits[:, -1:]) > 0:
+        if np.sum(img_digits[:1, :]) + np.sum(img_digits[-1:, :]) + np.sum(img_digits[:, -1:]) > 0:
             return -1 
 
         # 2桁
@@ -437,6 +445,35 @@ class FinishSearcher:
     def __init__(self, template_img_path, th_finish_match = 0.9):
         self.img_template = cv2.cvtColor(cv2.imread(template_img_path), cv2.COLOR_BGR2GRAY)
         self.th_finish_match = th_finish_match
+
+    def find(self, img_capture):
+        roi = img_capture[self.roi_top:self.roi_bottom, self.roi_left:self.roi_right] 
+        img_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        ret, img_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_OTSU)
+
+        result = cv2.matchTemplate(img_otsu, self.img_template, cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+
+        # print(f"max value: {maxVal}, position: {maxLoc}")
+        # cv2.imshow('img_otsu', img_otsu)
+        # cv2.waitKey(0)
+
+        if maxVal >= self.th_finish_match:
+            return True
+        else:
+            return False
+
+
+class WinLoseSearcher:
+    roi_top = 640
+    roi_bottom = 740
+    roi_left = 1000
+    roi_right = 1250
+
+    def __init__(self, template_win_img_path, template_lose_img_path, th_match = 0.9):
+        self.win_img_template = cv2.cvtColor(cv2.imread(template_win_img_path), cv2.COLOR_BGR2GRAY)
+        self.lose_img_template = cv2.cvtColor(cv2.imread(template_lose_img_path), cv2.COLOR_BGR2GRAY)
+        self.th_finish_match = th_match
 
     def find(self, img_capture):
         roi = img_capture[self.roi_top:self.roi_bottom, self.roi_left:self.roi_right] 
