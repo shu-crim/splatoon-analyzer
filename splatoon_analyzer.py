@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 import recognition
 import utility
 import time
+import glob
 
 
 default_output_dir = r"D:\Documents\Python\splatoon\output"
@@ -40,14 +41,15 @@ def main(movie_path, output_dir):
         digit_template_paths.append(r".\template\digit_" + str(i) + ".png")
     time_reader = recognition.TimeReader(digit_template_paths, r".\template\extra_time.png")
     finish_searcher = recognition.FinishSearcher(r".\template\finish.png")
+    judge_searcher = recognition.JudgeSearcher(r".\template\win.png", r".\template\lose.png")
 
     # ゲーム時間1秒単位のタイムライン
     game_time_max = int(video_frame_count / video_fps) + 300 # 最短300秒+動画時間
-    cols = ["GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
-    df_timeline = pd.DataFrame([[0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
+    cols = ["Result", "GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
+    df_timeline = pd.DataFrame([["-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
-        df_timeline = df_timeline.append(pd.Series([i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
+        df_timeline = df_timeline.append(pd.Series(["-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
 
     # 初期化
     index_frame = 1
@@ -62,6 +64,7 @@ def main(movie_path, output_dir):
     time_finish = -1
     proc_time = {}
     read_frecuency = 5
+    judge = recognition.Judge.none
 
     while True:
         # フレーム情報取得
@@ -148,7 +151,10 @@ def main(movie_path, output_dir):
                 proc_time["time_find_finish"] = time.perf_counter() - time_start
             else:
                 # Finish読み後はWIN/LOSE読み
-
+                judge = judge_searcher.find(img_frame)
+                if judge != recognition.Judge.none:
+                    print("Judge: {0}".format(judge))
+                    break
 
         # debug:状態表示
         time_start = time.perf_counter()
@@ -215,6 +221,12 @@ def main(movie_path, output_dir):
             else:
                 df_timeline.loc[i, "Initiative"] = 0
 
+    # 勝敗をセット
+    if judge != recognition.Judge.none:
+        for i in range(game_time_max):
+            df_timeline.loc[i, "Result"] = "WIN" if judge == recognition.Judge.win else "LOSE"
+
+    # Finishを読めていた場合、その時間でタイムラインを打ち切り
     if time_finish >= 0:
         for i in range(time_finish + 1, game_time_max):
             df_timeline = df_timeline.drop(index=i)
@@ -222,6 +234,7 @@ def main(movie_path, output_dir):
     output_csv_path = os.path.join(output_dir, os.path.basename(movie_path).split(".")[0] + "_timeline.csv")
     df_timeline.to_csv(output_csv_path)
 
+    # キルデス部分の切り出し動画
     death_count = 0
     kill_count = 0
     for item in events:
@@ -240,4 +253,6 @@ def main(movie_path, output_dir):
 
 
 if __name__ == "__main__":
-    main(default_movie_path, default_output_dir)
+    movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\*.mp4")
+    for path in movie_paths:
+        main(path, default_output_dir)

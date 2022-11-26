@@ -329,8 +329,8 @@ class CountReader:
             our_pnealty = 0 # 長い期間読めず→非表示(ゼロ)と判断
 
         # print("our_pnealty:" + str(our_pnealty))
-        cv2.imshow('OurPenalty', img_otsu)
-        cv2.waitKey(1)
+        # cv2.imshow('OurPenalty', img_otsu)
+        # cv2.waitKey(1)
         
         # 敵
         roi_opponent_penalty = img_capture[self.roi_penalty_top:self.roi_penalty_bottom, self.roi_opponent_penalty_left:self.roi_opponent_penalty_left+self.roi_penalty_width]
@@ -464,30 +464,38 @@ class FinishSearcher:
             return False
 
 
-class WinLoseSearcher:
-    roi_top = 640
-    roi_bottom = 740
-    roi_left = 1000
-    roi_right = 1250
+class Judge(Enum):
+    none = 0
+    win = 1
+    lose = 2
+
+class JudgeSearcher:
+    roi_top = 40
+    roi_bottom = 150
+    roi_left = 0
+    roi_right = 250
 
     def __init__(self, template_win_img_path, template_lose_img_path, th_match = 0.9):
         self.win_img_template = cv2.cvtColor(cv2.imread(template_win_img_path), cv2.COLOR_BGR2GRAY)
         self.lose_img_template = cv2.cvtColor(cv2.imread(template_lose_img_path), cv2.COLOR_BGR2GRAY)
-        self.th_finish_match = th_match
+        self.th_match = th_match
 
     def find(self, img_capture):
         roi = img_capture[self.roi_top:self.roi_bottom, self.roi_left:self.roi_right] 
         img_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         ret, img_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_OTSU)
 
-        result = cv2.matchTemplate(img_otsu, self.img_template, cv2.TM_CCOEFF_NORMED)
-        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
-
-        # print(f"max value: {maxVal}, position: {maxLoc}")
         # cv2.imshow('img_otsu', img_otsu)
         # cv2.waitKey(0)
 
-        if maxVal >= self.th_finish_match:
-            return True
-        else:
-            return False
+        result = cv2.matchTemplate(img_otsu, self.win_img_template, cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+        if maxVal >= self.th_match:
+            return Judge.win
+
+        result = cv2.matchTemplate(img_otsu, self.lose_img_template, cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+        if maxVal >= self.th_match:
+            return Judge.lose
+
+        return Judge.none
