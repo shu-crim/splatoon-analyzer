@@ -15,7 +15,7 @@ class IkaLampReader:
     span_lamps = 64
     num_lumps_per_team = 4
     th_cross_match = 0.8
-    th_offline_match = 0.9
+    th_offline_match = 0.99
 
     def __init__(self, cross_template_img_path, offline_template_img_path):
         self.img_cross_template = cv2.cvtColor(cv2.imread(cross_template_img_path), cv2.COLOR_BGR2GRAY)
@@ -74,17 +74,18 @@ class IkaLampReader:
         roi_offline = roi_lamps[top_offline:top_offline+self.height_offline_template, :]
         offline_match = 1 - cv2.matchTemplate(roi_offline, self.img_offline_template, cv2.TM_SQDIFF)[0] / self.height_offline_template / self.width_offline_template / (255 * 255)
 
-        # plt.plot(offline_match)
-        # plt.show()
-        # cv2.imshow('roi_offline', roi_offline)
-        # cv2.waitKey(0)
-
         for i in range(self.num_lumps_per_team):
             x_max = np.argmax(offline_match)
             if (offline_match[x_max] >= self.th_offline_match):
+                plt.plot(offline_match)
+                plt.show()
+                # cv2.imshow('roi_offline', roi_offline)
+                # cv2.waitKey(0)
+                print("offline_match[x_max]: {0}".format(offline_match[x_max]))
+
                 num_offline += 1
                 lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = False
-                offline_match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, match.shape[0])] = 0
+                offline_match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, offline_match.shape[0])] = 0
             else:
                 break
 
