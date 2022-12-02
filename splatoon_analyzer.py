@@ -14,7 +14,8 @@ default_output_dir = r"D:\Documents\Python\splatoon\output"
 default_movie_path = r'D:\Documents\OBS\test2.mp4'
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-12_19-27-37_エリア勝利_キンメダイ美術館.mp4' #エリアノックアウト勝利
 # default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_21-29-17_昇格戦_エリア敗北_海女美術大学.mp4' #エリアノックアウト敗北
-default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-31_12-33-02_延長突入.mp4' #延長突入
+default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_22-03-28_エリア逆転勝利_ナメロウ金属_回線落ち過検出か.mp4' #延長突入
+default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4' #相手が回線落ち
 # default_movie_path = r'D:\Documents\OBS\ ペナルティ読みミス2.mp4'
 
 # 動画出力
@@ -23,7 +24,11 @@ def clipMovie(path_movie, path_seve, clip_start_sec, clip_end_sec, fps=30):
     video.write_videofile(path_seve, fps=fps)
 
 
-def main(movie_path, output_dir):
+def main(movie_path, output_dir, killdeath_movie=False):
+    if not os.path.exists(movie_path):
+        print("File is not exist: " + movie_path)
+        return
+
     # 動画キャプチャ
     cap = cv2.VideoCapture(movie_path)
     video_frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) # フレーム数を取得する
@@ -45,11 +50,11 @@ def main(movie_path, output_dir):
 
     # ゲーム時間1秒単位のタイムライン
     game_time_max = int(video_frame_count / video_fps) + 300 # 最短300秒+動画時間
-    cols = ["Result", "GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
-    df_timeline = pd.DataFrame([["-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
+    cols = ["Rule", "Result", "GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
+    df_timeline = pd.DataFrame([["-", "-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
-        df_timeline = df_timeline.append(pd.Series(["-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
+        df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
 
     # 初期化
     index_frame = 1
@@ -80,7 +85,7 @@ def main(movie_path, output_dir):
         if ret == False:
             break    
 
-        # img_frame = cv2.imread(r"D:\Documents\OBS\penalty_miss_1.png") #debug
+        # img_frame = cv2.imread(r"D:\Documents\OBS\area_count_cannot_read.png") #debug
 
         # 残り時間読み
         time_start = time.perf_counter()
@@ -226,6 +231,10 @@ def main(movie_path, output_dir):
         for i in range(game_time_max):
             df_timeline.loc[i, "Result"] = "WIN" if judge == recognition.Judge.win else "LOSE"
 
+    # ルールをセット：現在はエリア固定
+    for i in range(game_time_max):
+        df_timeline.loc[i, "Rule"] = "Area"
+
     # Finishを読めていた場合、その時間でタイムラインを打ち切り
     if time_finish >= 0:
         for i in range(time_finish + 1, game_time_max):
@@ -235,24 +244,29 @@ def main(movie_path, output_dir):
     df_timeline.to_csv(output_csv_path)
 
     # キルデス部分の切り出し動画
-    death_count = 0
-    kill_count = 0
-    for item in events:
-        if item.event_kind == utility.EventKind.death:
-            clip_start = max(item.frame / video_fps - 10, 0)
-            clip_end = min(item.frame / video_fps + 3, video_frame_count / video_fps - 1)
-            save_path = os.path.join(output_dir, str.format("{0}_death_{1:04d}.mp4", os.path.basename(movie_path).split(".")[0], death_count))
-            clipMovie(movie_path, save_path, clip_start, clip_end)
-            death_count += 1
-        elif item.event_kind == utility.EventKind.kill:
-            clip_start = max(item.frame / video_fps - 10, 0)
-            clip_end = min(item.frame / video_fps + 5, video_frame_count / video_fps - 1)
-            save_path = os.path.join(output_dir, str.format("{0}_kill_{1:04d}.mp4", os.path.basename(movie_path).split(".")[0], kill_count))
-            clipMovie(movie_path, save_path, clip_start, clip_end)
-            kill_count += 1
+    if killdeath_movie:
+        death_count = 0
+        kill_count = 0
+        for item in events:
+            if item.event_kind == utility.EventKind.death:
+                clip_start = max(item.frame / video_fps - 10, 0)
+                clip_end = min(item.frame / video_fps + 3, video_frame_count / video_fps - 1)
+                save_path = os.path.join(output_dir, str.format("{0}_death_{1:04d}.mp4", os.path.basename(movie_path).split(".")[0], death_count))
+                clipMovie(movie_path, save_path, clip_start, clip_end)
+                death_count += 1
+            elif item.event_kind == utility.EventKind.kill:
+                clip_start = max(item.frame / video_fps - 10, 0)
+                clip_end = min(item.frame / video_fps + 5, video_frame_count / video_fps - 1)
+                save_path = os.path.join(output_dir, str.format("{0}_kill_{1:04d}.mp4", os.path.basename(movie_path).split(".")[0], kill_count))
+                clipMovie(movie_path, save_path, clip_start, clip_end)
+                kill_count += 1
 
 
 if __name__ == "__main__":
+    # main(default_movie_path, default_output_dir)
+   
     movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\*.mp4")
     for path in movie_paths:
+        if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", path + "*.csv"))):
+            continue
         main(path, default_output_dir)
