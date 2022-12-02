@@ -15,7 +15,7 @@ default_movie_path = r'D:\Documents\OBS\test2.mp4'
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-12_19-27-37_エリア勝利_キンメダイ美術館.mp4' #エリアノックアウト勝利
 # default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_21-29-17_昇格戦_エリア敗北_海女美術大学.mp4' #エリアノックアウト敗北
 default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_22-03-28_エリア逆転勝利_ナメロウ金属_回線落ち過検出か.mp4' #延長突入
-default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4' #相手が回線落ち
+default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4'
 # default_movie_path = r'D:\Documents\OBS\ ペナルティ読みミス2.mp4'
 
 # 動画出力
@@ -33,7 +33,7 @@ def main(movie_path, output_dir, killdeath_movie=False):
     cap = cv2.VideoCapture(movie_path)
     video_frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) # フレーム数を取得する
     video_fps = cap.get(cv2.CAP_PROP_FPS)                 # フレームレートを取得する
-    # cap.set(cv2.CAP_PROP_POS_FRAMES, 19000) # デバッグ用フレーム移動
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 5030) # デバッグ用フレーム移動
 
     # 各種画像処理エンジン
     time_manager = utility.TimeManager(video_fps)
@@ -50,11 +50,13 @@ def main(movie_path, output_dir, killdeath_movie=False):
 
     # ゲーム時間1秒単位のタイムライン
     game_time_max = int(video_frame_count / video_fps) + 300 # 最短300秒+動画時間
-    cols = ["Rule", "Result", "GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive", "Kill", "Death", "NumSubLive", "Initiative"]
-    df_timeline = pd.DataFrame([["-", "-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0]], columns=cols) # ゲーム開始時
+    cols = ["Rule", "Result", "GameTime[s]", "OurCount", "OpponentCount", "OurPenalty", "OpponentPenalty", "OurNumLive", "OpponentNumLive",
+            "Kill", "Death", "NumSubLive", "Initiative",
+            "LampOur1", "LampOur2", "LampOur3", "LampOur4", "LampOpponent1", "LampOpponent2", "LampOpponent3", "LampOpponent4"]
+    df_timeline = pd.DataFrame([["-", "-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]], columns=cols) # ゲーム開始時
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
-        df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0], index=df_timeline.columns), ignore_index=True)
+        df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], index=df_timeline.columns), ignore_index=True)
 
     # 初期化
     index_frame = 1
@@ -62,8 +64,8 @@ def main(movie_path, output_dir, killdeath_movie=False):
     num_kill_prev = 0
     events = []
     gachi_kind = recognition.GachiKind.none
-    our_lamp = [True, True, True, True]
-    opponent_lamp = [True, True, True, True]
+    our_lamp = [1, 1, 1, 1]
+    opponent_lamp = [1, 1, 1, 1]
     count = [100, 100]
     penalty  = [0, 0]
     time_finish = -1
@@ -77,10 +79,6 @@ def main(movie_path, output_dir, killdeath_movie=False):
         ret, img_frame = cap.read()
         proc_time["time_get_a_frame"] = time.perf_counter() - time_start
 
-        # if index_frame < 6761:
-        #     index_frame += 1
-        #     continue
-        
         # 動画が終われば処理終了
         if ret == False:
             break    
@@ -127,10 +125,16 @@ def main(movie_path, output_dir, killdeath_movie=False):
                 proc_time["time_read_lamps"] = time.perf_counter() - time_start
 
                 if game_time_int > 0:
-                    if np.sum(our_lamp) >= 0:
-                        df_timeline.loc[game_time_int, "OurNumLive"] = np.sum(our_lamp)
-                    if np.sum(opponent_lamp) >= 0:
-                        df_timeline.loc[game_time_int, "OpponentNumLive"] = np.sum(opponent_lamp)
+                    df_timeline.loc[game_time_int, "OurNumLive"] = our_lamp.count(1)
+                    df_timeline.loc[game_time_int, "OpponentNumLive"] = opponent_lamp.count(1)
+                    df_timeline.loc[game_time_int, "LampOur1"] = our_lamp[0]
+                    df_timeline.loc[game_time_int, "LampOur2"] = our_lamp[1]
+                    df_timeline.loc[game_time_int, "LampOur3"] = our_lamp[2]
+                    df_timeline.loc[game_time_int, "LampOur4"] = our_lamp[3]
+                    df_timeline.loc[game_time_int, "LampOpponent1"] = opponent_lamp[0]
+                    df_timeline.loc[game_time_int, "LampOpponent2"] = opponent_lamp[1]
+                    df_timeline.loc[game_time_int, "LampOpponent3"] = opponent_lamp[2]
+                    df_timeline.loc[game_time_int, "LampOpponent4"] = opponent_lamp[3]                    
             
                 # やられたサーチ
                 time_start = time.perf_counter()
@@ -263,10 +267,10 @@ def main(movie_path, output_dir, killdeath_movie=False):
 
 
 if __name__ == "__main__":
-    # main(default_movie_path, default_output_dir)
+    main(default_movie_path, default_output_dir)
    
-    movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\*.mp4")
-    for path in movie_paths:
-        if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", path + "*.csv"))):
-            continue
-        main(path, default_output_dir)
+    # movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\*.mp4")
+    # for path in movie_paths:
+    #     if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", os.path.basename(path).split(".")[0] + "*.csv"))):
+    #         continue
+    #     main(path, default_output_dir)

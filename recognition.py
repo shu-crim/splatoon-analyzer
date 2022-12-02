@@ -15,7 +15,7 @@ class IkaLampReader:
     span_lamps = 64
     num_lumps_per_team = 4
     th_cross_match = 0.8
-    th_offline_match = 0.995
+    th_offline_match = 0.996
 
     def __init__(self, cross_template_img_path, offline_template_img_path):
         self.img_cross_template = cv2.cvtColor(cv2.imread(cross_template_img_path), cv2.COLOR_BGR2GRAY)
@@ -56,38 +56,40 @@ class IkaLampReader:
         # cv2.waitKey(0)
 
         num_cross = 0
-        lamps = [True, True, True, True]
+        lamps = [1, 1, 1, 1]
         for i in range(self.num_lumps_per_team):
             # plt.plot(match)
             # plt.show()
             x_max = np.argmax(match)
             if (match[x_max] >= self.th_cross_match):
                 num_cross += 1
-                lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = False
+                lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = 0 # デス
                 match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, match.shape[0])] = 0
             else:
                 break
 
         # Search offline lamps
-        num_offline = 0
         top_offline = (roi_lamps.shape[0] - self.height_offline_template) // 2
         roi_offline = roi_lamps[top_offline:top_offline+self.height_offline_template, :]
         offline_match = 1 - cv2.matchTemplate(roi_offline, self.img_offline_template, cv2.TM_SQDIFF)[0] / self.height_offline_template / self.width_offline_template / (255 * 255)
-        cv2.imshow('roi_offline', roi_offline)
-        cv2.waitKey(1)
 
         for i in range(self.num_lumps_per_team):
             x_max = np.argmax(offline_match)
+            # print("offline_match[x_max]: {0}".format(offline_match[x_max]))
+            # plt.plot(offline_match)
+            # cv2.imshow('roi_offline', roi_offline)
+            # plt.show()
+            # cv2.waitKey(0)
+
             if (offline_match[x_max] >= self.th_offline_match):
+                # print("offline_match[x_max]: {0}".format(offline_match[x_max]))
                 # plt.plot(offline_match)
                 # plt.show()
-                cv2.imshow('roi_offline', roi_offline)
-                cv2.waitKey(1)
-                print("offline_match[x_max]: {0}".format(offline_match[x_max]))
+                # cv2.imshow('roi_offline', roi_offline)
+                # cv2.waitKey(1)
 
-                num_offline += 1
-                lamps[self.IconSenterXtoIndex(x_max * shrink_rate, opponent)] = False
-                offline_match[max(0, x_max-span_lamps//2):min(x_max+span_lamps//2, offline_match.shape[0])] = 0
+                lamps[self.IconSenterXtoIndex(x_max - 8, opponent)] = -1 # 切断 -8は、×のテンプレート幅48pxに対しオフラインテンプレート幅が32pxであるため座標を合わせる
+                offline_match[max(0, x_max-self.span_lamps//2):min(x_max+self.span_lamps//2, offline_match.shape[0])] = 0
             else:
                 break
 
@@ -238,28 +240,40 @@ class CountReader:
         # 味方
         roi = img_capture[150:210, 810:890]
         img_bin = self.rotateAndBinarize(roi, 5)
-        # cv2.imshow('our_count', img_bin)
+        cv2.imshow('our_count', img_bin)
+        cv2.waitKey(1)
         
         # 100とマッチング
         match = cv2.matchTemplate(img_bin, self.img_template_count100, cv2.TM_CCOEFF_NORMED)
         if np.max(match) >= self.th_100match:
             count_self = 100
         else:
-            # 縮小して数字テンプレートのサイズに合わせる
-            img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
-            # cv2.imshow('count self', img_resize)
+            # 二値化の方式を変えて再び100とマッチング
+            img_bin_alt = self.rotateAndBinarize(roi, 5, self.th_binarize)
+            match = cv2.matchTemplate(img_bin_alt, self.img_template_count100, cv2.TM_CCOEFF_NORMED)
 
-            # 数字読み
-            count_self = self.readTwoDigitsOld(img_resize)
+            # cv2.imshow('our_count', img_bin_alt)
+            # cv2.waitKey(1)
 
-            # 失敗したときは、固定値二値化で再チャレンジ
-            if count_self < 0:
-                img_bin = self.rotateAndBinarize(roi, 5, self.th_binarize)
+            if np.max(match) >= self.th_100match:
+                count_self = 100
+            else:
+                # 縮小して数字テンプレートのサイズに合わせる
                 img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
-                count_self = self.readTwoDigitsOld(img_resize)
-                
-                cv2.imshow('our_count', img_bin)
+                # cv2.imshow('our_count self', img_resize)
+                # cv2.waitKey(1)
 
+                # 数字読み
+                count_self = self.readTwoDigitsOld(img_resize)
+
+                # 失敗したときは、固定値二値化で再チャレンジ
+                if count_self < 0:
+                    img_bin = self.rotateAndBinarize(roi, 5, self.th_binarize)
+                    img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+                    count_self = self.readTwoDigitsOld(img_resize)
+                    
+                    # cv2.imshow('our_count', img_bin)
+                    # cv2.waitKey(1)
         
         # 相手
         roi = img_capture[150:210, 1035:1115]
@@ -270,21 +284,31 @@ class CountReader:
         if np.max(match) >= self.th_100match:
             count_opponent = 100
         else:
-            # 縮小して数字テンプレートのサイズに合わせる
-            img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+            # 二値化の方式を変えて再び100とマッチング
+            img_bin_alt = self.rotateAndBinarize(roi, -5, self.th_binarize)
+            match = cv2.matchTemplate(img_bin_alt, self.img_template_count100, cv2.TM_CCOEFF_NORMED)
 
-            # 数字読み
-            count_opponent = self.readTwoDigitsOld(img_resize)
+            # cv2.imshow('our_count', img_bin_alt)
+            # cv2.waitKey(1)
 
-            # 失敗したときは、固定値二値化で再チャレンジ
-            if count_opponent < 0:
-                img_bin = self.rotateAndBinarize(roi, -5, self.th_binarize)
+            if np.max(match) >= self.th_100match:
+                count_opponent = 100
+            else:
+                # 縮小して数字テンプレートのサイズに合わせる
                 img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+
+                # 数字読み
                 count_opponent = self.readTwoDigitsOld(img_resize)
 
-                cv2.imshow('count opponent', img_resize)
+                # 失敗したときは、固定値二値化で再チャレンジ
+                if count_opponent < 0:
+                    img_bin = self.rotateAndBinarize(roi, -5, self.th_binarize)
+                    img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+                    count_opponent = self.readTwoDigitsOld(img_resize)
 
-        cv2.waitKey(1)
+                    # cv2.imshow('count opponent', img_resize)
+
+        # cv2.waitKey(1)
 
         return (count_self, count_opponent)
 
