@@ -186,6 +186,7 @@ class CountReader:
     latest_opponent_penalty = 0
     th_count_same_penalty_not_zero = 3
     th_count_same_penalty_zero = 30
+    th_binarize = 243
     
     def __init__(self, path_template_count100):
         img = cv2.imread(path_template_count100)
@@ -235,6 +236,7 @@ class CountReader:
         # 味方
         roi = img_capture[150:210, 810:890]
         img_bin = self.rotateAndBinarize(roi, 5)
+        # cv2.imshow('our_count', img_bin)
         
         # 100とマッチング
         match = cv2.matchTemplate(img_bin, self.img_template_count100, cv2.TM_CCOEFF_NORMED)
@@ -247,6 +249,15 @@ class CountReader:
 
             # 数字読み
             count_self = self.readTwoDigitsOld(img_resize)
+
+            # 失敗したときは、固定値二値化で再チャレンジ
+            if count_self < 0:
+                img_bin = self.rotateAndBinarize(roi, 5, self.th_binarize)
+                img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+                count_self = self.readTwoDigitsOld(img_resize)
+                
+                cv2.imshow('our_count', img_bin)
+
         
         # 相手
         roi = img_capture[150:210, 1035:1115]
@@ -259,15 +270,23 @@ class CountReader:
         else:
             # 縮小して数字テンプレートのサイズに合わせる
             img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
-            # cv2.imshow('count opponent', img_resize)
 
             # 数字読み
             count_opponent = self.readTwoDigitsOld(img_resize)
-        # cv2.waitKey(1)
+
+            # 失敗したときは、固定値二値化で再チャレンジ
+            if count_opponent < 0:
+                img_bin = self.rotateAndBinarize(roi, -5, self.th_binarize)
+                img_resize = cv2.resize(img_bin, dsize=None, fx=0.8, fy=0.8, interpolation=cv2.INTER_NEAREST)
+                count_opponent = self.readTwoDigitsOld(img_resize)
+
+                cv2.imshow('count opponent', img_resize)
+
+        cv2.waitKey(1)
 
         return (count_self, count_opponent)
 
-    def rotateAndBinarize(self, img, degree):
+    def rotateAndBinarize(self, img, degree, th_lumi=None):
         # グレースケール化
         roi_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
@@ -276,14 +295,18 @@ class CountReader:
         center = (int(w / 2), int(h / 2))
         trans = cv2.getRotationMatrix2D(center, degree, 1.0)
         img_rotate = cv2.warpAffine(roi_gray, trans, (w,h))
-        
-        # 数字領域ぎりぎりに絞ることでコントラストの低い数字と背景を分離できるようにする
-        roi_binarize = img_rotate[5:-5, 5:-5]
 
-        # 二値化
-        ret, img_otsu = cv2.threshold(roi_binarize, 0, 255, cv2.THRESH_OTSU)
-        img_binarize = np.zeros(img_rotate.shape, dtype=img_rotate.dtype)
-        img_binarize[5:-5, 5:-5] = img_otsu
+        if th_lumi != None:
+            # 指定値で二値化
+            ret, img_binarize = cv2.threshold(img_rotate, th_lumi, 255, cv2.THRESH_BINARY)
+        else:
+            # 数字領域ぎりぎりに絞ることでコントラストの低い数字と背景を分離できるようにする
+            roi_binarize = img_rotate[5:-5, 5:-5]
+
+            # 二値化
+            ret, img_otsu = cv2.threshold(roi_binarize, 0, 255, cv2.THRESH_OTSU)
+            img_binarize = np.zeros(img_rotate.shape, dtype=img_rotate.dtype)
+            img_binarize[5:-5, 5:-5] = img_otsu
 
         return img_binarize
 
