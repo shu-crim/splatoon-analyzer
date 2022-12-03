@@ -33,7 +33,7 @@ def main(movie_path, output_dir, killdeath_movie=False):
     cap = cv2.VideoCapture(movie_path)
     video_frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) # フレーム数を取得する
     video_fps = cap.get(cv2.CAP_PROP_FPS)                 # フレームレートを取得する
-    # cap.set(cv2.CAP_PROP_POS_FRAMES, 5030) # デバッグ用フレーム移動
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 200 * video_fps) # デバッグ用フレーム移動
 
     # 各種画像処理エンジン
     time_manager = utility.TimeManager(video_fps)
@@ -47,6 +47,7 @@ def main(movie_path, output_dir, killdeath_movie=False):
     time_reader = recognition.TimeReader(digit_template_paths, r".\template\extra_time.png")
     finish_searcher = recognition.FinishSearcher(r".\template\finish.png")
     judge_searcher = recognition.JudgeSearcher(r".\template\win.png", r".\template\lose.png")
+    interruption_searcher = recognition.InterruptionSearcher(r".\template\invalid_match.png", r".\template\connection_error.png")
 
     # ゲーム時間1秒単位のタイムライン
     game_time_max = int(video_frame_count / video_fps) + 300 # 最短300秒+動画時間
@@ -158,6 +159,11 @@ def main(movie_path, output_dir, killdeath_movie=False):
                     time_finish = game_time_int
                     # break
                 proc_time["time_find_finish"] = time.perf_counter() - time_start
+
+                # 中断読み
+                if interruption_searcher.find(img_frame):
+                    time_finish = game_time_int - 1 # 中断となってから認識までのラグ対策に-1
+                    break
             else:
                 # Finish読み後はWIN/LOSE読み
                 judge = judge_searcher.find(img_frame)
@@ -267,10 +273,10 @@ def main(movie_path, output_dir, killdeath_movie=False):
 
 
 if __name__ == "__main__":
-    main(default_movie_path, default_output_dir)
+    # main(default_movie_path, default_output_dir)
    
-    # movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\*.mp4")
-    # for path in movie_paths:
-    #     if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", os.path.basename(path).split(".")[0] + "*.csv"))):
-    #         continue
-    #     main(path, default_output_dir)
+    movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\回線落ち_要対処\*.mp4")
+    for path in movie_paths:
+        if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", os.path.basename(path).split(".")[0] + "*.csv"))):
+            continue
+        main(path, default_output_dir)

@@ -549,3 +549,39 @@ class JudgeSearcher:
             return Judge.lose
 
         return Judge.none
+
+
+class InterruptionSearcher:
+    roi_top = 535
+    roi_bottom = 600
+    roi_left = 795
+    roi_right = 950
+
+    def __init__(self, invalid_template_img_path, connection_err_template_img_path, th_match = 0.9):
+        self.invalid_img_template = cv2.cvtColor(cv2.imread(invalid_template_img_path), cv2.COLOR_BGR2GRAY)
+        self.connection_err_img_template = cv2.cvtColor(cv2.imread(connection_err_template_img_path), cv2.COLOR_BGR2GRAY)
+        self.th_match = th_match
+
+    def find(self, img_capture):
+        roi = img_capture[self.roi_top:self.roi_bottom, self.roi_left:self.roi_right] 
+        img_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        ret, img_otsu = cv2.threshold(img_gray, 0, 255, cv2.THRESH_OTSU)
+
+        # cv2.imshow('img_otsu', img_otsu)
+        # cv2.waitKey(0)
+
+        result = cv2.matchTemplate(img_otsu, self.invalid_img_template, cv2.TM_CCOEFF_NORMED)
+        maxVal = np.max(result)
+        # print(f"max value: {maxVal}")
+
+        if maxVal >= self.th_match:
+            return True
+
+        result = cv2.matchTemplate(img_otsu, self.connection_err_img_template, cv2.TM_CCOEFF_NORMED)
+        maxVal = np.max(result)
+        # print(f"max value: {maxVal}")
+
+        if maxVal >= self.th_match:
+            return True
+        else:
+            return False
