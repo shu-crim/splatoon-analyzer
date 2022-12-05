@@ -43,6 +43,10 @@ def main(input_dir, output_dir):
     num_input_csv = 0
     first_df = True
     for path in timeline_csv_paths:
+        # debug
+        # if not "2022-11-26_21-03-51" in path:
+        #     continue
+
         new_df = pd.read_csv(path)
 
         # 勝利したか
@@ -131,7 +135,7 @@ def main(input_dir, output_dir):
 
         # もしペナルティが無かった場合の勝利チームを判定
         win_team_without_penalty = 0
-        game_time_without_penalty = 0
+        game_time_without_penalty = -1
         if win or lose:
             our_count = 100
             opponent_count = 100
@@ -147,7 +151,15 @@ def main(input_dir, output_dir):
                     win_team_without_penalty = -1
                     game_time_without_penalty = i
                     break
-        
+            if game_time_without_penalty < 0:
+                game_time_without_penalty = len(new_df)
+                if our_count == opponent_count:
+                    win_team_without_penalty = 0
+                elif our_count < opponent_count:
+                    win_team_without_penalty = 1
+                else:
+                    win_team_without_penalty = -1
+
         # 人数差が増加したときのカウント進行差を算出
         with open(os.path.join(output_dir, filename_head + "_count_analysis.csv"), mode='a') as f:
             for i in range(1, len(new_df)):
@@ -204,18 +216,18 @@ def main(input_dir, output_dir):
         f.write("勝利数/勝率,{0},{1:0.1f}%\n".format(num_win, num_win / (num_win + num_lose) * 100))
 
         f.write("カウント先制数/先制率,{0},{1:0.1f}%\n".format(num_first_initiative, num_first_initiative / num_game * 100))
-        f.write("カウント先制時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_initiative_and_win, num_first_initiative_and_win / num_first_initiative * 100))
+        f.write("カウント先制時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_initiative_and_win, (num_first_initiative_and_win / num_first_initiative * 100) if num_first_initiative > 0 else 0))
         f.write("カウント先制取られ時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_lost_first_initiative_and_win, num_lost_first_initiative_and_win / (num_win + num_lose - num_first_initiative) * 100))
         f.write("カウント先制チームの勝率,,{0:0.1f}%\n".format((num_first_initiative_and_win + num_lost_first_initiative_and_lose) / (num_win + num_lose) * 100))
 
         f.write("先制キル数/先制率,{0},{1:0.1f}%\n".format(num_first_kill, num_first_kill / num_game * 100))
-        f.write("先制キル時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_kill_and_win, num_first_kill_and_win / num_first_kill * 100))
+        f.write("先制キル時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_kill_and_win, (num_first_kill_and_win / num_first_kill * 100) if num_first_kill > 0 else 0))
         f.write("先制キル取られ時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_lost_first_kill_and_win, num_lost_first_kill_and_win / (num_win + num_lose - num_first_kill) * 100))
         f.write("先制キル取得チームの勝率,,{0:0.1f}%\n".format((num_first_kill_and_win + num_lost_first_kill_and_lose) / (num_win + num_lose) * 100))
 
         f.write("人数差+2先制数/先制率,{0},{1:0.1f}%\n".format(num_first_2sub, num_first_2sub / num_game * 100))
-        f.write("人数差+2先制時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_2sub_and_win, num_first_2sub_and_win / num_first_2sub * 100))
-        f.write("人数差+2先制取られ時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_lost_first_2sub_and_win, num_lost_first_2sub_and_win / num_lost_first_2sub * 100))
+        f.write("人数差+2先制時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_first_2sub_and_win, (num_first_2sub_and_win / num_first_2sub * 100) if num_first_2sub > 0 else 0))
+        f.write("人数差+2先制取られ時の勝利数/勝率,{0},{1:0.1f}%\n".format(num_lost_first_2sub_and_win, (num_lost_first_2sub_and_win / num_lost_first_2sub * 100) if num_lost_first_2sub > 0 else 0))
         f.write("人数差+2先制チームの勝率,,{0:0.1f}%\n".format((num_first_2sub_and_win + num_lost_first_2sub_and_lose) / (num_win + num_lose) * 100))
 
 
