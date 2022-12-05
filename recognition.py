@@ -15,7 +15,7 @@ class IkaLampReader:
     span_lamps = 64
     num_lumps_per_team = 4
     th_cross_match = 0.8
-    th_offline_match = 0.996
+    th_offline_match = 0.997
 
     def __init__(self, cross_template_img_path, offline_template_img_path):
         self.img_cross_template = cv2.cvtColor(cv2.imread(cross_template_img_path), cv2.COLOR_BGR2GRAY)
@@ -86,7 +86,7 @@ class IkaLampReader:
                 # plt.plot(offline_match)
                 # plt.show()
                 # cv2.imshow('roi_offline', roi_offline)
-                # cv2.waitKey(1)
+                # cv2.waitKey(0)
 
                 lamps[self.IconSenterXtoIndex(x_max - 8, opponent)] = -1 # 切断 -8は、×のテンプレート幅48pxに対しオフラインテンプレート幅が32pxであるため座標を合わせる
                 offline_match[max(0, x_max-self.span_lamps//2):min(x_max+self.span_lamps//2, offline_match.shape[0])] = 0
@@ -174,7 +174,7 @@ class GachiKind(Enum):
     asari = 4
 
 class CountReader:
-    th_100match = 0.6
+    th_100match = 0.5
     th_digit_match = 0.6
     gachi_kind = GachiKind.area #GachiKind.none #試合の途中からでもルール認識できるようになるまでデバッグでarea固定
     roi_penalty_top = 222
@@ -289,7 +289,7 @@ class CountReader:
             match = cv2.matchTemplate(img_bin_alt, self.img_template_count100, cv2.TM_CCOEFF_NORMED)
 
             # cv2.imshow('our_count', img_bin_alt)
-            # cv2.waitKey(1)
+            # cv2.waitKey(0)
 
             if np.max(match) >= self.th_100match:
                 count_opponent = 100
