@@ -11,12 +11,9 @@ import glob
 
 
 default_output_dir = r"D:\Documents\Python\splatoon\output"
-default_movie_path = r'D:\Documents\OBS\test2.mp4'
-default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-12_19-27-37_エリア勝利_キンメダイ美術館.mp4' #エリアノックアウト勝利
-# default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_21-29-17_昇格戦_エリア敗北_海女美術大学.mp4' #エリアノックアウト敗北
-default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-11_22-03-28_エリア逆転勝利_ナメロウ金属_回線落ち過検出か.mp4' #延長突入
-default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4'
-# default_movie_path = r'D:\Documents\OBS\ ペナルティ読みミス2.mp4'
+default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-11-26_22-05-28.mp4' #エリアノックアウト勝利
+# default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4'
+# default_movie_path = r'D:\Documents\OBS\2022-10-11_21-47-06_キルデスシーン.mp4'
 
 # 動画出力
 def clipMovie(path_movie, path_seve, clip_start_sec, clip_end_sec, fps=30):
@@ -24,7 +21,7 @@ def clipMovie(path_movie, path_seve, clip_start_sec, clip_end_sec, fps=30):
     video.write_videofile(path_seve, fps=fps)
 
 
-def main(movie_path, output_dir, killdeath_movie=False):
+def main(movie_path, output_dir, killdeath_movie=False, recognition_movie=False):
     if not os.path.exists(movie_path):
         print("File is not exist: " + movie_path)
         return
@@ -33,6 +30,8 @@ def main(movie_path, output_dir, killdeath_movie=False):
     cap = cv2.VideoCapture(movie_path)
     video_frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT) # フレーム数を取得する
     video_fps = cap.get(cv2.CAP_PROP_FPS)                 # フレームレートを取得する
+    video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     # cap.set(cv2.CAP_PROP_POS_FRAMES, 200 * video_fps) # デバッグ用フレーム移動
 
     # 各種画像処理エンジン
@@ -58,6 +57,13 @@ def main(movie_path, output_dir, killdeath_movie=False):
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
         df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], index=df_timeline.columns), ignore_index=True)
+
+    # 認識結果movie
+    if recognition_movie:
+        recognition_movie_maker = utility.RecognitionMovieMaker(
+            os.path.join(output_dir, os.path.basename(movie_path).split(".")[0] + "_recognition.mp4"),
+            30, (video_width, video_height)
+        )
 
     # 初期化
     index_frame = 1
@@ -101,6 +107,8 @@ def main(movie_path, output_dir, killdeath_movie=False):
         proc_time["time_read_time"] = time.perf_counter() - time_start
 
         # 各種インジケータが表示中であれば読む
+        num_kill = None
+        death = None
         if indicator_enabled:
             # カウント読み(毎フレーム読む)
             time_start = time.perf_counter()
@@ -139,7 +147,8 @@ def main(movie_path, output_dir, killdeath_movie=False):
             
                 # やられたサーチ
                 time_start = time.perf_counter()
-                if death_searcher.find(img_frame, index_frame):
+                death = death_searcher.find(img_frame, index_frame)
+                if death:
                     events.append(utility.Event(utility.EventKind.death, index_frame))
                 proc_time["time_find_death"] = time.perf_counter() - time_start
                 
@@ -171,6 +180,10 @@ def main(movie_path, output_dir, killdeath_movie=False):
                     print("Judge: {0}".format(judge))
                     break
 
+        # 認識結果movie
+        if recognition_movie:
+            recognition_movie_maker.makeFrame(img_frame, 300 - game_time_int, our_lamp, opponent_lamp, count, penalty, num_kill, death)
+
         # debug:状態表示
         time_start = time.perf_counter()
         print(str.format("Frame:{0}, GameTime:{1:0.2f}sec LastTime:{2}sec gachi_kind:{3}, lamp:{4}vs{5}, count:{6} penalty:{7}",
@@ -186,7 +199,9 @@ def main(movie_path, output_dir, killdeath_movie=False):
     cap.release()
     cv2.destroyAllWindows()
 
-    # return #debug
+    # 認識結果movie
+    if recognition_movie:
+        recognition_movie_maker.release()
 
     # CSV出力
     cols = ["GameTime[s]", "Event"]
@@ -273,10 +288,10 @@ def main(movie_path, output_dir, killdeath_movie=False):
 
 
 if __name__ == "__main__":
-    # main(default_movie_path, default_output_dir)
+    main(default_movie_path, default_output_dir, recognition_movie=False)
    
-    movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\回線落ち_要対処\*.mp4")
-    for path in movie_paths:
-        if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", os.path.basename(path).split(".")[0] + "*.csv"))):
-            continue
-        main(path, default_output_dir)
+    # movie_paths = glob.glob(r"D:\Documents\OBS\ガチエリア\回線落ち_要対処\*.mp4")
+    # for path in movie_paths:
+    #     if 0 < len(glob.glob(os.path.join("D:\Documents\Python\splatoon\output", os.path.basename(path).split(".")[0] + "*.csv"))):
+    #         continue
+    #     main(path, default_output_dir)
