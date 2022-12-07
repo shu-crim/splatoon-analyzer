@@ -11,7 +11,7 @@ import glob
 
 
 default_output_dir = r"D:\Documents\Python\splatoon\output"
-default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-11-26_22-05-28.mp4' #エリアノックアウト勝利
+default_movie_path = r'D:\Documents\OBS\ガチエリア\2022-10-31_12-27-05.mp4'
 # default_movie_path = r'D:\Documents\OBS\ガチエリア\回線落ち_要対処\2022-11-30_21-45-44_開始直後の無効試合.mp4'
 # default_movie_path = r'D:\Documents\OBS\2022-10-11_21-47-06_キルデスシーン.mp4'
 
@@ -32,7 +32,7 @@ def main(movie_path, output_dir, killdeath_movie=False, recognition_movie=False)
     video_fps = cap.get(cv2.CAP_PROP_FPS)                 # フレームレートを取得する
     video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    # cap.set(cv2.CAP_PROP_POS_FRAMES, 200 * video_fps) # デバッグ用フレーム移動
+    # cap.set(cv2.CAP_PROP_POS_FRAMES, 189 * video_fps) # デバッグ用フレーム移動
 
     # 各種画像処理エンジン
     time_manager = utility.TimeManager(video_fps)
@@ -56,7 +56,7 @@ def main(movie_path, output_dir, killdeath_movie=False, recognition_movie=False)
     df_timeline = pd.DataFrame([["-", "-", 0, 100, 100, 0, 0, 4, 4, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]], columns=cols) # ゲーム開始時
     for i in range(1, game_time_max):
         # -1は読み取れなかった場合に残る初期値
-        df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1], index=df_timeline.columns), ignore_index=True)
+        df_timeline = df_timeline.append(pd.Series(["-", "-", i, -1, -1, -1, -1, -1, -1, 0, 0, 0, 0, -2, -2, -2, -2, -2, -2, -2, -2], index=df_timeline.columns), ignore_index=True)
 
     # 認識結果movie
     if recognition_movie:
@@ -238,6 +238,22 @@ def main(movie_path, output_dir, killdeath_movie=False, recognition_movie=False)
             df_timeline.loc[i, "OurNumLive"] = df_timeline.loc[i - 1, "OurNumLive"]
         if df_timeline.loc[i, "OpponentNumLive"] < 0:
             df_timeline.loc[i, "OpponentNumLive"] = df_timeline.loc[i - 1, "OpponentNumLive"]
+        if df_timeline.loc[i, "LampOur1"] < -1:
+            df_timeline.loc[i, "LampOur1"] = df_timeline.loc[i - 1, "LampOur1"]
+        if df_timeline.loc[i, "LampOur2"] < -1:
+            df_timeline.loc[i, "LampOur2"] = df_timeline.loc[i - 1, "LampOur2"]
+        if df_timeline.loc[i, "LampOur3"] < -1:
+            df_timeline.loc[i, "LampOur3"] = df_timeline.loc[i - 1, "LampOur3"]
+        if df_timeline.loc[i, "LampOur4"] < -1:
+            df_timeline.loc[i, "LampOur4"] = df_timeline.loc[i - 1, "LampOur4"]
+        if df_timeline.loc[i, "LampOpponent1"] < -1:
+            df_timeline.loc[i, "LampOpponent1"] = df_timeline.loc[i - 1, "LampOpponent1"]
+        if df_timeline.loc[i, "LampOpponent2"] < -1:
+            df_timeline.loc[i, "LampOpponent2"] = df_timeline.loc[i - 1, "LampOpponent2"]
+        if df_timeline.loc[i, "LampOpponent3"] < -1:
+            df_timeline.loc[i, "LampOpponent3"] = df_timeline.loc[i - 1, "LampOpponent3"]
+        if df_timeline.loc[i, "LampOpponent4"] < -1:
+            df_timeline.loc[i, "LampOpponent4"] = df_timeline.loc[i - 1, "LampOpponent4"]
 
         # 分析用にデータ加工
         df_timeline.loc[i, "NumSubLive"] = df_timeline.loc[i, "OurNumLive"] - df_timeline.loc[i, "OpponentNumLive"]
